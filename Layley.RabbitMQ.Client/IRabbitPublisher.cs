@@ -2,7 +2,7 @@
 using System.Threading.Tasks;
 using Layley.RabbitMQ.Client.Models;
 
-namespace Layley.RabbitMQ.Client.Publishers
+namespace Layley.RabbitMQ.Client
 {
     public interface IRabbitPublisher
     {

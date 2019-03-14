@@ -4,7 +4,6 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Threading.Tasks;
-using Layley.RabbitMQ.Client.Connections;
 
 namespace Layley.RabbitMQ.Client.Subscribers
 {
@@ -13,7 +12,7 @@ namespace Layley.RabbitMQ.Client.Subscribers
         internal IConnection _connection;
         internal IModel _listeningChannel;
         internal IModel _deadLetterChannel;
-        internal Dictionary<string, Func<object, Task<object>>> listeners;
+        internal Dictionary<string, Func<object, Task>> listeners;
         internal EventingBasicConsumer consumer;
 
         /// <summary>Fires before the Subscriber's method is called</summary>
@@ -24,7 +23,7 @@ namespace Layley.RabbitMQ.Client.Subscribers
 
         public RabbitHandler(IRabbitConnectionFactory connectionFactory)
         {
-            listeners = new Dictionary<string, Func<object, Task<object>>>();
+            listeners = new Dictionary<string, Func<object, Task>>();
             _connection = connectionFactory.CreateConnection();
             InitializeListeningChannel();
             InitializeDeadLetterQueue();
@@ -82,7 +81,7 @@ namespace Layley.RabbitMQ.Client.Subscribers
                 {
                     string str = Encoding.UTF8.GetString(ea.Body);
                     string routingKey = ea.RoutingKey;
-                    Func<object, Task<object>> listener = listeners[routingKey];
+                    Func<object, Task> listener = listeners[routingKey];
                     SubscriptionEventArgs eventArgs = new SubscriptionEventArgs()
                     {
                         Message = (object)str,
@@ -102,15 +101,16 @@ namespace Layley.RabbitMQ.Client.Subscribers
             _listeningChannel.BasicConsume(MessageBusConfiguration.QueueName, false, MessageBusConfiguration.ConsumerTag, consumer);
         }
 
-        private async Task<bool> MethodWrapper<T>(SubscriptionEventArgs eventArgs, Func<T, Task<object>> serviceMethod)
+        private async Task<bool> MethodWrapper<T>(SubscriptionEventArgs eventArgs, Func<T, Task> serviceMethod)
         {
             try
             {
                 OnSubscriberExecuting(eventArgs);
 
-                var result = await serviceMethod?.Invoke((T)eventArgs.Message);
+                //var result = await serviceMethod?.Invoke((T)eventArgs.Message); // If result type is object
+                await serviceMethod?.Invoke((T)eventArgs.Message); // Converting to void
                 //if(MessageBusConfiguration.AutomaticRequeueIsEnabled)
-                    //Task.Run(() => RabbitRequeueMessageHandler.RequeueMessage(result, eventArgs.Message, eventArgs.CorrelationId));
+                //Task.Run(() => RabbitRequeueMessageHandler.RequeueMessage(result, eventArgs.Message, eventArgs.CorrelationId));
             }
             catch (Exception ex)
             {
@@ -139,14 +139,13 @@ namespace Layley.RabbitMQ.Client.Subscribers
                 return;
             afterExecution(null, eventArgs);
         }
-
-
+        
         /// <summary>
         /// Binds a new routing key into the default queue with a defined function to execute on receive.
         /// </summary>
         /// <param name="routingKey">A <see cref="T:System.String" /> with the routing key to bind the queue to the exchange.</param>
         /// <param name="value">The delegate method to handle the incoming message.</param>
-        private void Listen(string routingKey, Func<object, Task<object>> value)
+        private void Listen(string routingKey, Func<object, Task> value)
         {
             listeners.Add(routingKey, value);
             _listeningChannel.QueueBind(MessageBusConfiguration.QueueName, MessageBusConfiguration.ExchangeName, routingKey);
@@ -162,7 +161,7 @@ namespace Layley.RabbitMQ.Client.Subscribers
                 _parentHandler = parentHandler;
             }
 
-            public Func<object, Task<object>> this[string routingKey]
+            public Func<object, Task> this[string routingKey]
             {
                 set
                 {
@@ -170,7 +169,7 @@ namespace Layley.RabbitMQ.Client.Subscribers
                 }
             }
 
-            protected void Subscribe(string routingKey, Func<object, Task<object>> value)
+            protected void Subscribe(string routingKey, Func<object, Task> value)
             {
                 _parentHandler.Listen(routingKey, value);
             }
@@ -195,10 +194,9 @@ namespace Layley.RabbitMQ.Client.Subscribers
             {
                 get
                 {
-                    bool flag = false;
                     if (ServiceCallException == null)
-                        flag = true;
-                    return flag;
+                        return true;
+                    return false;
                 }
             }
 

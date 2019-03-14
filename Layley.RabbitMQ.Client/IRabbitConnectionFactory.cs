@@ -1,6 +1,6 @@
 ﻿using RabbitMQ.Client;
 
-namespace Layley.RabbitMQ.Client.Connections
+namespace Layley.RabbitMQ.Client
 {
     public interface IRabbitConnectionFactory
     {
